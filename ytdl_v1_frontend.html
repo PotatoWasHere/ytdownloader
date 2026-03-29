@@ -1,0 +1,1129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YTDL — RIPPED</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Bebas+Neue&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0a;
+    --surface: #111111;
+    --border: #2a2a2a;
+    --accent: #ff3c00;
+    --accent2: #ffdc00;
+    --text: #f0f0f0;
+    --muted: #555;
+    --success: #00e676;
+    --error: #ff1744;
+    --mono: 'Space Mono', monospace;
+    --display: 'Bebas Neue', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Scanline effect */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.05) 2px,
+      rgba(0,0,0,0.05) 4px
+    );
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  header {
+    border-bottom: 3px solid var(--accent);
+    padding: 20px 40px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--surface);
+  }
+
+  .logo {
+    font-family: var(--display);
+    font-size: 2.8rem;
+    letter-spacing: 4px;
+    color: var(--accent);
+    text-shadow: 4px 4px 0 var(--accent2);
+  }
+
+  .logo span { color: var(--text); }
+
+  .status-bar {
+    font-size: 0.65rem;
+    color: var(--muted);
+    text-align: right;
+    line-height: 1.8;
+  }
+
+  .status-dot {
+    display: inline-block;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--success);
+    margin-right: 5px;
+    animation: pulse 1.5s infinite;
+  }
+
+  @keyframes pulse {
+    0%,100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  main {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 40px 20px;
+  }
+
+  .section-label {
+    font-size: 0.65rem;
+    letter-spacing: 4px;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  /* URL Input */
+  .url-block {
+    margin-bottom: 30px;
+  }
+
+  .url-row {
+    display: flex;
+    gap: 0;
+    border: 2px solid var(--accent);
+  }
+
+  .url-row input {
+    flex: 1;
+    background: var(--surface);
+    border: none;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 0.9rem;
+    padding: 16px 20px;
+    outline: none;
+  }
+
+  .url-row input::placeholder { color: var(--muted); }
+
+  .url-row input:focus { background: #161616; }
+
+  .btn-fetch {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    font-family: var(--display);
+    font-size: 1.2rem;
+    letter-spacing: 2px;
+    padding: 0 30px;
+    cursor: pointer;
+    transition: background 0.1s;
+    white-space: nowrap;
+  }
+
+  .btn-fetch:hover { background: #ff5722; }
+  .btn-fetch:active { background: #b71c1c; transform: scale(0.98); }
+
+  .btn-fetch.loading {
+    background: var(--muted);
+    cursor: not-allowed;
+    animation: throb 0.7s infinite alternate;
+  }
+
+  @keyframes throb {
+    from { opacity: 0.6; }
+    to { opacity: 1; }
+  }
+
+  /* Video Info */
+  #video-info {
+    display: none;
+    border: 2px solid var(--border);
+    background: var(--surface);
+    margin-bottom: 30px;
+    animation: slideIn 0.3s ease;
+  }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .info-inner {
+    display: flex;
+    gap: 20px;
+    padding: 20px;
+  }
+
+  .thumb-wrap {
+    position: relative;
+    flex-shrink: 0;
+    width: 200px;
+    height: 112px;
+    border: 2px solid var(--border);
+    overflow: hidden;
+  }
+
+  .thumb-wrap img {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .thumb-badge {
+    position: absolute;
+    bottom: 0; right: 0;
+    background: rgba(0,0,0,0.85);
+    color: var(--accent2);
+    font-size: 0.65rem;
+    padding: 2px 6px;
+    font-family: var(--mono);
+  }
+
+  .info-meta { flex: 1; }
+
+  .info-title {
+    font-family: var(--display);
+    font-size: 1.4rem;
+    letter-spacing: 1px;
+    line-height: 1.2;
+    margin-bottom: 10px;
+    color: var(--text);
+  }
+
+  .info-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+
+  .tag {
+    background: #1a1a1a;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 0.6rem;
+    padding: 3px 8px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .tag.red { border-color: var(--accent); color: var(--accent); }
+  .tag.yellow { border-color: var(--accent2); color: var(--accent2); }
+  .tag.green { border-color: var(--success); color: var(--success); }
+
+  /* Options Grid */
+  .options-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 2px;
+    margin-bottom: 30px;
+    border: 2px solid var(--border);
+  }
+
+  .opt-group {
+    background: var(--surface);
+    padding: 16px;
+  }
+
+  .opt-group:not(:last-child) {
+    border-right: 2px solid var(--border);
+  }
+
+  .opt-label {
+    font-size: 0.6rem;
+    letter-spacing: 3px;
+    color: var(--accent);
+    margin-bottom: 10px;
+    text-transform: uppercase;
+  }
+
+  select, .radio-group {
+    width: 100%;
+    background: #0d0d0d;
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    padding: 10px 12px;
+    outline: none;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23ff3c00' d='M0 0l6 8 6-8z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 10px;
+  }
+
+  select:focus { border-color: var(--accent); }
+
+  .radio-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    background: transparent;
+    border: none;
+    padding: 0;
+  }
+
+  .radio-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    padding: 6px 8px;
+    border: 1px solid transparent;
+    transition: border-color 0.1s;
+  }
+
+  .radio-item:hover { border-color: var(--border); }
+  .radio-item.active { border-color: var(--accent); background: #1a0800; }
+
+  .radio-item input { display: none; }
+
+  .radio-dot {
+    width: 10px; height: 10px;
+    border: 2px solid var(--muted);
+    border-radius: 50%;
+    flex-shrink: 0;
+    transition: border-color 0.1s, background 0.1s;
+  }
+
+  .radio-item.active .radio-dot {
+    border-color: var(--accent);
+    background: var(--accent);
+  }
+
+  .radio-text {
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+
+  .radio-item.active .radio-text { color: var(--text); }
+
+  /* Checkboxes */
+  .check-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .check-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 0.75rem;
+    color: var(--muted);
+    padding: 4px 0;
+    transition: color 0.1s;
+  }
+
+  .check-item:hover { color: var(--text); }
+
+  .check-item input { display: none; }
+
+  .check-box {
+    width: 14px; height: 14px;
+    border: 2px solid var(--muted);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: border-color 0.1s;
+  }
+
+  .check-item.checked .check-box {
+    border-color: var(--accent2);
+    background: var(--accent2);
+  }
+
+  .check-item.checked .check-box::after {
+    content: '✓';
+    font-size: 9px;
+    color: #000;
+    font-weight: bold;
+  }
+
+  .check-item.checked { color: var(--text); }
+
+  /* Download Button */
+  .download-section {
+    display: flex;
+    gap: 10px;
+    align-items: stretch;
+  }
+
+  .btn-download {
+    flex: 1;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    font-family: var(--display);
+    font-size: 1.8rem;
+    letter-spacing: 4px;
+    padding: 20px;
+    cursor: pointer;
+    transition: all 0.1s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .btn-download::before {
+    content: '';
+    position: absolute;
+    top: 0; left: -100%;
+    width: 100%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+    transition: left 0.4s;
+  }
+
+  .btn-download:hover::before { left: 100%; }
+  .btn-download:hover { background: #ff5722; box-shadow: 0 0 30px rgba(255,60,0,0.4); }
+  .btn-download:active { transform: scale(0.99); }
+
+  .btn-download:disabled {
+    background: var(--muted);
+    cursor: not-allowed;
+    box-shadow: none;
+  }
+
+  .btn-copy-cmd {
+    background: var(--surface);
+    border: 2px solid var(--border);
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    letter-spacing: 2px;
+    padding: 0 18px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.1s;
+    text-transform: uppercase;
+  }
+
+  .btn-copy-cmd:hover { border-color: var(--accent2); color: var(--accent2); }
+
+  /* Progress */
+  #progress-block {
+    display: none;
+    margin-top: 20px;
+    border: 2px solid var(--border);
+    background: var(--surface);
+    padding: 16px 20px;
+    animation: slideIn 0.3s ease;
+  }
+
+  .prog-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+
+  .prog-label {
+    font-size: 0.65rem;
+    letter-spacing: 3px;
+    color: var(--accent);
+    text-transform: uppercase;
+  }
+
+  .prog-pct {
+    font-family: var(--display);
+    font-size: 1.4rem;
+    color: var(--text);
+  }
+
+  .prog-bar-bg {
+    background: #1a1a1a;
+    height: 6px;
+    width: 100%;
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 10px;
+  }
+
+  .prog-bar-fill {
+    height: 100%;
+    background: var(--accent);
+    width: 0%;
+    transition: width 0.3s ease;
+    position: relative;
+  }
+
+  .prog-bar-fill::after {
+    content: '';
+    position: absolute;
+    top: 0; right: 0;
+    width: 20px; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.6));
+    animation: shimmer 0.8s infinite;
+  }
+
+  @keyframes shimmer {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  .prog-details {
+    display: flex;
+    gap: 20px;
+    font-size: 0.65rem;
+    color: var(--muted);
+  }
+
+  .prog-details span { white-space: nowrap; }
+  .prog-details .val { color: var(--text); }
+
+  /* Log */
+  #log-block {
+    margin-top: 16px;
+    background: #060606;
+    border: 1px solid var(--border);
+    padding: 12px 16px;
+    max-height: 140px;
+    overflow-y: auto;
+    font-size: 0.68rem;
+    color: var(--muted);
+    line-height: 1.8;
+  }
+
+  #log-block .log-line { display: block; }
+  #log-block .log-line.ok { color: var(--success); }
+  #log-block .log-line.err { color: var(--error); }
+  #log-block .log-line.info { color: var(--accent2); }
+
+  /* Command output */
+  #cmd-output {
+    display: none;
+    margin-top: 20px;
+    background: #050505;
+    border: 1px solid var(--border);
+    padding: 16px 20px;
+    font-size: 0.75rem;
+    color: var(--success);
+    font-family: var(--mono);
+    line-height: 1.8;
+    position: relative;
+  }
+
+  .cmd-title {
+    font-size: 0.6rem;
+    letter-spacing: 3px;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  /* History */
+  #history-block {
+    margin-top: 40px;
+    border-top: 2px solid var(--border);
+    padding-top: 24px;
+  }
+
+  .history-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid #1a1a1a;
+    font-size: 0.72rem;
+    animation: slideIn 0.3s ease;
+  }
+
+  .history-row:hover { background: #111; }
+
+  .hist-thumb {
+    width: 60px; height: 34px;
+    object-fit: cover;
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .hist-title { flex: 1; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hist-format { color: var(--accent); font-size: 0.6rem; letter-spacing: 2px; text-transform: uppercase; }
+  .hist-size { color: var(--muted); font-size: 0.65rem; }
+  .hist-time { color: var(--muted); font-size: 0.6rem; white-space: nowrap; }
+
+  .no-history {
+    color: var(--muted);
+    font-size: 0.72rem;
+    padding: 20px 0;
+    text-align: center;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+  }
+
+  /* Toast */
+  #toast {
+    position: fixed;
+    bottom: 30px; right: 30px;
+    background: var(--surface);
+    border-left: 4px solid var(--success);
+    color: var(--text);
+    font-size: 0.75rem;
+    padding: 12px 20px;
+    z-index: 10000;
+    display: none;
+    animation: toastIn 0.3s ease;
+  }
+
+  #toast.error { border-color: var(--error); }
+
+  @keyframes toastIn {
+    from { transform: translateX(20px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--accent); }
+
+  @media (max-width: 700px) {
+    .options-grid { grid-template-columns: 1fr; }
+    .opt-group:not(:last-child) { border-right: none; border-bottom: 2px solid var(--border); }
+    .info-inner { flex-direction: column; }
+    .thumb-wrap { width: 100%; height: 180px; }
+    header { padding: 14px 18px; }
+    .logo { font-size: 1.8rem; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">YT<span>DL</span> RIPPED</div>
+  <div class="status-bar">
+    <div><span class="status-dot"></span>BACKEND: <span id="backend-status">CHECKING...</span></div>
+    <div>ENGINE: yt-dlp + ffmpeg</div>
+    <div id="current-time"></div>
+  </div>
+</header>
+
+<main>
+
+  <!-- URL Input -->
+  <div class="url-block">
+    <div class="section-label">// PASTE URL</div>
+    <div class="url-row">
+      <input type="text" id="url-input" placeholder="https://youtube.com/watch?v=... or playlist/channel URL" />
+      <button class="btn-fetch" id="btn-fetch" onclick="fetchInfo()">ANALYSE</button>
+    </div>
+  </div>
+
+  <!-- Video Info -->
+  <div id="video-info">
+    <div class="info-inner">
+      <div class="thumb-wrap">
+        <img id="thumb-img" src="" alt="thumbnail">
+        <div class="thumb-badge" id="thumb-duration">--:--</div>
+      </div>
+      <div class="info-meta">
+        <div class="info-title" id="info-title">—</div>
+        <div class="info-tags" id="info-tags"></div>
+        <div style="font-size:0.7rem; color:var(--muted); line-height:1.8;">
+          <span id="info-channel">—</span> &nbsp;|&nbsp;
+          <span id="info-views">—</span> views &nbsp;|&nbsp;
+          <span id="info-date">—</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Options -->
+  <div class="options-grid">
+    <div class="opt-group">
+      <div class="opt-label">// FORMAT</div>
+      <div class="radio-group" id="format-group">
+        <label class="radio-item active" onclick="selectFormat(this,'mp4')">
+          <input type="radio" name="format" value="mp4" checked>
+          <div class="radio-dot"></div>
+          <span class="radio-text">MP4 — Video</span>
+        </label>
+        <label class="radio-item" onclick="selectFormat(this,'mp3')">
+          <input type="radio" name="format" value="mp3">
+          <div class="radio-dot"></div>
+          <span class="radio-text">MP3 — Audio only</span>
+        </label>
+        <label class="radio-item" onclick="selectFormat(this,'webm')">
+          <input type="radio" name="format" value="webm">
+          <div class="radio-dot"></div>
+          <span class="radio-text">WEBM — Video</span>
+        </label>
+        <label class="radio-item" onclick="selectFormat(this,'m4a')">
+          <input type="radio" name="format" value="m4a">
+          <div class="radio-dot"></div>
+          <span class="radio-text">M4A — Audio</span>
+        </label>
+        <label class="radio-item" onclick="selectFormat(this,'flac')">
+          <input type="radio" name="format" value="flac">
+          <div class="radio-dot"></div>
+          <span class="radio-text">FLAC — Lossless</span>
+        </label>
+        <label class="radio-item" onclick="selectFormat(this,'wav')">
+          <input type="radio" name="format" value="wav">
+          <div class="radio-dot"></div>
+          <span class="radio-text">WAV — Uncompressed</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="opt-group">
+      <div class="opt-label">// QUALITY</div>
+      <div style="margin-bottom: 10px;">
+        <div style="font-size:0.6rem; color:var(--muted); margin-bottom:6px;">RESOLUTION</div>
+        <select id="quality-select">
+          <option value="best">Best Available</option>
+          <option value="2160">4K — 2160p</option>
+          <option value="1440">QHD — 1440p</option>
+          <option value="1080">FHD — 1080p</option>
+          <option value="720">HD — 720p</option>
+          <option value="480">SD — 480p</option>
+          <option value="360">Low — 360p</option>
+          <option value="240">Min — 240p</option>
+        </select>
+      </div>
+      <div style="margin-bottom: 10px;">
+        <div style="font-size:0.6rem; color:var(--muted); margin-bottom:6px;">AUDIO BITRATE</div>
+        <select id="audio-quality">
+          <option value="best">Best</option>
+          <option value="320">320 kbps</option>
+          <option value="256">256 kbps</option>
+          <option value="192">192 kbps</option>
+          <option value="128">128 kbps</option>
+          <option value="96">96 kbps</option>
+        </select>
+      </div>
+      <div>
+        <div style="font-size:0.6rem; color:var(--muted); margin-bottom:6px;">VIDEO CODEC</div>
+        <select id="vcodec">
+          <option value="any">Any (Recommended)</option>
+          <option value="h264">H.264 / AVC</option>
+          <option value="h265">H.265 / HEVC</option>
+          <option value="vp9">VP9</option>
+          <option value="av1">AV1</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="opt-group">
+      <div class="opt-label">// OPTIONS</div>
+      <div class="check-list">
+        <label class="check-item" onclick="toggleCheck(this)">
+          <input type="checkbox" id="chk-subtitles">
+          <div class="check-box"></div>
+          <span>Embed subtitles</span>
+        </label>
+        <label class="check-item" onclick="toggleCheck(this)">
+          <input type="checkbox" id="chk-thumbnail">
+          <div class="check-box"></div>
+          <span>Embed thumbnail</span>
+        </label>
+        <label class="check-item" onclick="toggleCheck(this)">
+          <input type="checkbox" id="chk-metadata">
+          <div class="check-box"></div>
+          <span>Add metadata</span>
+        </label>
+        <label class="check-item" onclick="toggleCheck(this)">
+          <input type="checkbox" id="chk-playlist">
+          <div class="check-box"></div>
+          <span>Download playlist</span>
+        </label>
+        <label class="check-item" onclick="toggleCheck(this)">
+          <input type="checkbox" id="chk-sponsorblock">
+          <div class="check-box"></div>
+          <span>SponsorBlock skip</span>
+        </label>
+        <label class="check-item" onclick="toggleCheck(this)">
+          <input type="checkbox" id="chk-chapters">
+          <div class="check-box"></div>
+          <span>Add chapter marks</span>
+        </label>
+        <label class="check-item" onclick="toggleCheck(this)">
+          <input type="checkbox" id="chk-split">
+          <div class="check-box"></div>
+          <span>Split by chapters</span>
+        </label>
+      </div>
+
+      <div style="margin-top: 12px;">
+        <div style="font-size:0.6rem; color:var(--muted); margin-bottom:6px;">OUTPUT PATH</div>
+        <input type="text" id="out-path" placeholder="~/Downloads/%(title)s.%(ext)s"
+          style="width:100%; background:#0d0d0d; border:1px solid var(--border); color:var(--text);
+                 font-family:var(--mono); font-size:0.7rem; padding:8px 10px; outline:none; box-sizing:border-box;">
+      </div>
+    </div>
+  </div>
+
+  <!-- Download + Copy Command -->
+  <div class="download-section">
+    <button class="btn-download" id="btn-download" onclick="startDownload()" disabled>
+      DOWNLOAD
+    </button>
+    <button class="btn-copy-cmd" onclick="copyCommand()">COPY<br>CMD</button>
+  </div>
+
+  <!-- Progress -->
+  <div id="progress-block">
+    <div class="prog-header">
+      <div class="prog-label">// DOWNLOADING</div>
+      <div class="prog-pct" id="prog-pct">0%</div>
+    </div>
+    <div class="prog-bar-bg">
+      <div class="prog-bar-fill" id="prog-bar"></div>
+    </div>
+    <div class="prog-details">
+      <span>SPEED: <span class="val" id="prog-speed">—</span></span>
+      <span>ETA: <span class="val" id="prog-eta">—</span></span>
+      <span>SIZE: <span class="val" id="prog-size">—</span></span>
+      <span>FRAGMENTS: <span class="val" id="prog-frag">—</span></span>
+    </div>
+    <div id="log-block"></div>
+  </div>
+
+  <!-- yt-dlp command -->
+  <div id="cmd-output">
+    <div class="cmd-title">// YT-DLP COMMAND</div>
+    <pre id="cmd-text" style="white-space: pre-wrap; word-break: break-all;"></pre>
+  </div>
+
+  <!-- History -->
+  <div id="history-block">
+    <div class="section-label">// DOWNLOAD HISTORY</div>
+    <div id="history-list">
+      <div class="no-history">NO DOWNLOADS YET</div>
+    </div>
+  </div>
+
+</main>
+
+<div id="toast"></div>
+
+<script>
+const API = 'http://localhost:8080';
+let currentVideo = null;
+let selectedFormat = 'mp4';
+let history = JSON.parse(localStorage.getItem('ytdl_history') || '[]');
+
+// Clock
+function updateClock() {
+  const now = new Date();
+  document.getElementById('current-time').textContent =
+    now.toLocaleTimeString('en-GB', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// Check backend
+async function checkBackend() {
+  try {
+    const r = await fetch(API + '/ping', {signal: AbortSignal.timeout(2000)});
+    if (r.ok) {
+      document.getElementById('backend-status').textContent = 'ONLINE';
+      document.getElementById('backend-status').style.color = 'var(--success)';
+    } else throw new Error();
+  } catch {
+    document.getElementById('backend-status').textContent = 'OFFLINE';
+    document.getElementById('backend-status').style.color = 'var(--error)';
+  }
+}
+checkBackend();
+setInterval(checkBackend, 10000);
+
+// Format select
+function selectFormat(el, fmt) {
+  document.querySelectorAll('.radio-item').forEach(i => i.classList.remove('active'));
+  el.classList.add('active');
+  selectedFormat = fmt;
+  updateCommand();
+  // Toggle video-only quality for audio formats
+  const isAudio = ['mp3','m4a','flac','wav','opus'].includes(fmt);
+  document.getElementById('quality-select').disabled = isAudio;
+  document.getElementById('vcodec').disabled = isAudio;
+}
+
+function toggleCheck(el) {
+  el.classList.toggle('checked');
+  updateCommand();
+}
+
+// Fetch info
+async function fetchInfo() {
+  const url = document.getElementById('url-input').value.trim();
+  if (!url) { toast('Paste a URL first', true); return; }
+
+  const btn = document.getElementById('btn-fetch');
+  btn.textContent = 'FETCHING...';
+  btn.classList.add('loading');
+  btn.disabled = true;
+
+  try {
+    const r = await fetch(API + '/info', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({url})
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Failed');
+
+    currentVideo = data;
+    renderVideoInfo(data);
+    document.getElementById('btn-download').disabled = false;
+    updateCommand();
+    toast('Video info loaded ✓');
+  } catch (e) {
+    toast(e.message, true);
+  } finally {
+    btn.textContent = 'ANALYSE';
+    btn.classList.remove('loading');
+    btn.disabled = false;
+  }
+}
+
+function renderVideoInfo(d) {
+  document.getElementById('video-info').style.display = 'block';
+  document.getElementById('thumb-img').src = d.thumbnail || '';
+  document.getElementById('thumb-duration').textContent = formatDuration(d.duration);
+  document.getElementById('info-title').textContent = d.title || 'Unknown Title';
+  document.getElementById('info-channel').textContent = d.uploader || '—';
+  document.getElementById('info-views').textContent = d.view_count ? d.view_count.toLocaleString() : '—';
+  document.getElementById('info-date').textContent = d.upload_date ? formatDate(d.upload_date) : '—';
+
+  const tags = document.getElementById('info-tags');
+  tags.innerHTML = '';
+  if (d.is_live) tags.innerHTML += '<span class="tag red">● LIVE</span>';
+  if (d.age_limit > 0) tags.innerHTML += `<span class="tag red">18+</span>`;
+  if (d.playlist_count > 1) tags.innerHTML += `<span class="tag yellow">PLAYLIST ${d.playlist_count}</span>`;
+  if (d.duration) tags.innerHTML += `<span class="tag green">VIDEO</span>`;
+  if (d.width) tags.innerHTML += `<span class="tag">${d.width}×${d.height}</span>`;
+  if (d.fps) tags.innerHTML += `<span class="tag">${d.fps}fps</span>`;
+}
+
+function formatDuration(s) {
+  if (!s) return '--:--';
+  const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = s%60;
+  return h ? `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`
+           : `${m}:${String(sec).padStart(2,'0')}`;
+}
+
+function formatDate(d) {
+  if (!d) return '—';
+  return d.slice(0,4)+'-'+d.slice(4,6)+'-'+d.slice(6,8);
+}
+
+// Download
+async function startDownload() {
+  const url = document.getElementById('url-input').value.trim();
+  if (!url) { toast('No URL', true); return; }
+
+  const opts = {
+    url,
+    format: selectedFormat,
+    quality: document.getElementById('quality-select').value,
+    audio_quality: document.getElementById('audio-quality').value,
+    vcodec: document.getElementById('vcodec').value,
+    subtitles: document.querySelector('#chk-subtitles').closest('.check-item').classList.contains('checked'),
+    thumbnail: document.querySelector('#chk-thumbnail').closest('.check-item').classList.contains('checked'),
+    metadata: document.querySelector('#chk-metadata').closest('.check-item').classList.contains('checked'),
+    playlist: document.querySelector('#chk-playlist').closest('.check-item').classList.contains('checked'),
+    sponsorblock: document.querySelector('#chk-sponsorblock').closest('.check-item').classList.contains('checked'),
+    chapters: document.querySelector('#chk-chapters').closest('.check-item').classList.contains('checked'),
+    split_chapters: document.querySelector('#chk-split').closest('.check-item').classList.contains('checked'),
+    output: document.getElementById('out-path').value || '',
+  };
+
+  document.getElementById('btn-download').disabled = true;
+  document.getElementById('progress-block').style.display = 'block';
+  document.getElementById('log-block').innerHTML = '';
+  setProgress(0, '—', '—', '—', '—');
+
+  try {
+    const r = await fetch(API + '/download', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(opts)
+    });
+
+    const reader = r.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, {stream:true});
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const ev = JSON.parse(line);
+          handleEvent(ev);
+        } catch {}
+      }
+    }
+  } catch (e) {
+    toast(e.message, true);
+    addLog('Error: ' + e.message, 'err');
+  } finally {
+    document.getElementById('btn-download').disabled = false;
+  }
+}
+
+function handleEvent(ev) {
+  if (ev.type === 'progress') {
+    setProgress(ev.percent, ev.speed, ev.eta, ev.size, ev.fragment);
+  } else if (ev.type === 'log') {
+    addLog(ev.msg, ev.level || '');
+  } else if (ev.type === 'done') {
+    setProgress(100, '—', 'DONE', ev.size || '—', '—');
+    toast('Download complete ✓');
+    addLog('✓ Saved: ' + ev.filename, 'ok');
+    addToHistory(ev);
+  } else if (ev.type === 'error') {
+    addLog('✗ ' + ev.msg, 'err');
+    toast(ev.msg, true);
+  }
+}
+
+function setProgress(pct, speed, eta, size, frag) {
+  document.getElementById('prog-bar').style.width = pct + '%';
+  document.getElementById('prog-pct').textContent = Math.round(pct) + '%';
+  document.getElementById('prog-speed').textContent = speed;
+  document.getElementById('prog-eta').textContent = eta;
+  document.getElementById('prog-size').textContent = size;
+  document.getElementById('prog-frag').textContent = frag;
+}
+
+function addLog(msg, cls='') {
+  const log = document.getElementById('log-block');
+  const span = document.createElement('span');
+  span.className = 'log-line ' + cls;
+  span.textContent = '> ' + msg;
+  log.appendChild(span);
+  log.scrollTop = log.scrollHeight;
+}
+
+// History
+function addToHistory(ev) {
+  const entry = {
+    title: currentVideo?.title || 'Unknown',
+    thumb: currentVideo?.thumbnail || '',
+    format: selectedFormat,
+    size: ev.size || '—',
+    time: new Date().toLocaleTimeString(),
+    filename: ev.filename || ''
+  };
+  history.unshift(entry);
+  if (history.length > 30) history = history.slice(0, 30);
+  localStorage.setItem('ytdl_history', JSON.stringify(history));
+  renderHistory();
+}
+
+function renderHistory() {
+  const list = document.getElementById('history-list');
+  if (!history.length) {
+    list.innerHTML = '<div class="no-history">NO DOWNLOADS YET</div>';
+    return;
+  }
+  list.innerHTML = history.slice(0, 10).map(h => `
+    <div class="history-row">
+      ${h.thumb ? `<img class="hist-thumb" src="${h.thumb}" alt="">` : '<div class="hist-thumb" style="background:#1a1a1a;"></div>'}
+      <div class="hist-title">${h.title}</div>
+      <div class="hist-format">${h.format.toUpperCase()}</div>
+      <div class="hist-size">${h.size}</div>
+      <div class="hist-time">${h.time}</div>
+    </div>
+  `).join('');
+}
+
+renderHistory();
+
+// Command builder
+function buildCommand() {
+  const url = document.getElementById('url-input').value.trim() || '<URL>';
+  const fmt = selectedFormat;
+  const q = document.getElementById('quality-select').value;
+  const aq = document.getElementById('audio-quality').value;
+  const vc = document.getElementById('vcodec').value;
+  const out = document.getElementById('out-path').value;
+
+  const isAudio = ['mp3','m4a','flac','wav','opus'].includes(fmt);
+  let cmd = 'yt-dlp';
+
+  if (isAudio) {
+    cmd += ` -x --audio-format ${fmt}`;
+    if (aq !== 'best') cmd += ` --audio-quality ${aq}k`;
+  } else {
+    let fmtStr = q === 'best' ? 'bestvideo+bestaudio/best' : `bestvideo[height<=${q}]+bestaudio/best[height<=${q}]`;
+    if (vc !== 'any') fmtStr += `[vcodec^=${vc}]`;
+    cmd += ` -f "${fmtStr}" --merge-output-format ${fmt}`;
+  }
+
+  const chkSubs = document.querySelector('#chk-subtitles').closest('.check-item').classList.contains('checked');
+  const chkThumb = document.querySelector('#chk-thumbnail').closest('.check-item').classList.contains('checked');
+  const chkMeta = document.querySelector('#chk-metadata').closest('.check-item').classList.contains('checked');
+  const chkSb = document.querySelector('#chk-sponsorblock').closest('.check-item').classList.contains('checked');
+  const chkChap = document.querySelector('#chk-chapters').closest('.check-item').classList.contains('checked');
+  const chkSplit = document.querySelector('#chk-split').closest('.check-item').classList.contains('checked');
+
+  if (chkSubs) cmd += ' --embed-subs --sub-langs all';
+  if (chkThumb) cmd += ' --embed-thumbnail';
+  if (chkMeta) cmd += ' --embed-metadata';
+  if (chkSb) cmd += ' --sponsorblock-remove sponsor';
+  if (chkChap) cmd += ' --embed-chapters';
+  if (chkSplit) cmd += ' --split-chapters';
+
+  if (out) cmd += ` -o "${out}"`;
+  cmd += ` "${url}"`;
+  return cmd;
+}
+
+function updateCommand() {
+  const cmd = buildCommand();
+  document.getElementById('cmd-text').textContent = cmd;
+  document.getElementById('cmd-output').style.display = 'block';
+}
+
+function copyCommand() {
+  navigator.clipboard.writeText(buildCommand()).then(() => toast('Command copied ✓'));
+}
+
+// Keyboard shortcut
+document.getElementById('url-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') fetchInfo();
+});
+
+// Toast
+function toast(msg, err=false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = err ? 'error' : '';
+  t.style.display = 'block';
+  setTimeout(() => t.style.display = 'none', 3500);
+}
+</script>
+
+</body>
+</html>

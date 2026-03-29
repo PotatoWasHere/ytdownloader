@@ -1,0 +1,1389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prism — YouTube Downloader</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-1: #0d0f1a;
+    --bg-2: #111422;
+    --glass: rgba(255,255,255,0.04);
+    --glass-border: rgba(255,255,255,0.09);
+    --glass-hover: rgba(255,255,255,0.07);
+    --accent: #7c6aff;
+    --accent-2: #ff6ab0;
+    --accent-3: #6af7c8;
+    --text: #e8eaf6;
+    --text-muted: rgba(232,234,246,0.45);
+    --text-dim: rgba(232,234,246,0.25);
+    --success: #6af7c8;
+    --error: #ff6a6a;
+    --warning: #ffd56a;
+    --body: 'DM Sans', sans-serif;
+    --mono: 'DM Mono', monospace;
+    --radius: 16px;
+    --radius-sm: 10px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg-1);
+    color: var(--text);
+    font-family: var(--body);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Gradient mesh background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 80% 60% at 10% 0%, rgba(124,106,255,0.18) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 40% at 90% 20%, rgba(255,106,176,0.12) 0%, transparent 50%),
+      radial-gradient(ellipse 50% 70% at 50% 100%, rgba(106,247,200,0.1) 0%, transparent 60%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Noise texture */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    opacity: 0.03;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .app-wrap {
+    position: relative;
+    z-index: 1;
+    max-width: 820px;
+    margin: 0 auto;
+    padding: 40px 20px 80px;
+  }
+
+  /* Header */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 48px;
+  }
+
+  .logo-wrap {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .logo-icon {
+    width: 40px; height: 40px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    box-shadow: 0 0 30px rgba(124,106,255,0.4);
+  }
+
+  .logo-text {
+    font-size: 1.4rem;
+    font-weight: 600;
+    letter-spacing: -0.5px;
+  }
+
+  .logo-text span {
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+    border-radius: 100px;
+    padding: 5px 12px;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    backdrop-filter: blur(10px);
+  }
+
+  .pill-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--success);
+    animation: glow-pulse 2s infinite;
+  }
+
+  .pill-dot.offline { background: var(--error); animation: none; }
+
+  @keyframes glow-pulse {
+    0%,100% { box-shadow: 0 0 6px var(--success); }
+    50% { box-shadow: 0 0 0px transparent; }
+  }
+
+  /* Glass card */
+  .card {
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    transition: border-color 0.2s;
+  }
+
+  .card:hover { border-color: rgba(255,255,255,0.14); }
+
+  /* URL Input Card */
+  .url-card {
+    padding: 6px 6px 6px 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+    transition: box-shadow 0.3s;
+  }
+
+  .url-card:focus-within {
+    border-color: rgba(124,106,255,0.5);
+    box-shadow: 0 0 0 4px rgba(124,106,255,0.08), 0 8px 40px rgba(124,106,255,0.1);
+  }
+
+  .url-icon {
+    color: var(--text-dim);
+    font-size: 1.1rem;
+    flex-shrink: 0;
+  }
+
+  .url-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text);
+    font-family: var(--body);
+    font-size: 0.95rem;
+    font-weight: 400;
+  }
+
+  .url-input::placeholder { color: var(--text-dim); }
+
+  .btn-analyse {
+    background: linear-gradient(135deg, var(--accent), #9b6aff);
+    border: none;
+    border-radius: var(--radius-sm);
+    color: #fff;
+    font-family: var(--body);
+    font-size: 0.85rem;
+    font-weight: 500;
+    padding: 10px 22px;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+
+  .btn-analyse:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 24px rgba(124,106,255,0.4);
+  }
+
+  .btn-analyse:active { transform: translateY(0); }
+
+  .btn-analyse:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
+
+  /* Video Preview */
+  #video-info {
+    display: none;
+    padding: 16px;
+    margin-bottom: 16px;
+    animation: fadeUp 0.4s cubic-bezier(0.2, 0.8, 0.3, 1);
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .video-preview {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+  }
+
+  .thumb-container {
+    position: relative;
+    width: 180px;
+    height: 101px;
+    flex-shrink: 0;
+    border-radius: 10px;
+    overflow: hidden;
+    background: rgba(255,255,255,0.05);
+  }
+
+  .thumb-container img {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .duration-badge {
+    position: absolute;
+    bottom: 6px; right: 6px;
+    background: rgba(0,0,0,0.75);
+    color: #fff;
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    padding: 2px 7px;
+    border-radius: 5px;
+    backdrop-filter: blur(4px);
+  }
+
+  .video-details { flex: 1; min-width: 0; }
+
+  .video-title {
+    font-size: 0.95rem;
+    font-weight: 500;
+    line-height: 1.4;
+    margin-bottom: 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .video-meta {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+
+  .meta-chip {
+    font-size: 0.68rem;
+    padding: 3px 9px;
+    border-radius: 100px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.08);
+    color: var(--text-muted);
+  }
+
+  .meta-chip.accent { background: rgba(124,106,255,0.15); border-color: rgba(124,106,255,0.3); color: var(--accent); }
+  .meta-chip.pink { background: rgba(255,106,176,0.15); border-color: rgba(255,106,176,0.3); color: var(--accent-2); }
+  .meta-chip.green { background: rgba(106,247,200,0.15); border-color: rgba(106,247,200,0.3); color: var(--accent-3); }
+
+  .video-uploader {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+  }
+
+  /* Tabs */
+  .config-section { margin-bottom: 16px; }
+
+  .tabs {
+    display: flex;
+    gap: 4px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius);
+    padding: 5px;
+    margin-bottom: 12px;
+  }
+
+  .tab {
+    flex: 1;
+    text-align: center;
+    padding: 9px 14px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    border-radius: 11px;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: none;
+    background: transparent;
+    font-family: var(--body);
+  }
+
+  .tab.active {
+    background: var(--glass-hover);
+    color: var(--text);
+    box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+    border: 1px solid var(--glass-border);
+  }
+
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; animation: fadeUp 0.25s ease; }
+
+  /* Format grid */
+  .format-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+
+  .fmt-card {
+    background: var(--glass);
+    border: 1.5px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .fmt-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 0.2s;
+    background: linear-gradient(135deg, rgba(124,106,255,0.15), rgba(255,106,176,0.08));
+  }
+
+  .fmt-card:hover::before { opacity: 1; }
+  .fmt-card:hover { border-color: rgba(124,106,255,0.3); }
+
+  .fmt-card.active {
+    border-color: rgba(124,106,255,0.6);
+    box-shadow: 0 0 0 3px rgba(124,106,255,0.1), 0 4px 20px rgba(124,106,255,0.2);
+  }
+
+  .fmt-card.active::before { opacity: 1; }
+
+  .fmt-icon {
+    width: 28px; height: 28px;
+    border-radius: 7px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    font-weight: 700;
+    font-family: var(--mono);
+    margin-bottom: 7px;
+    letter-spacing: 0.5px;
+  }
+
+  .fmt-icon.video { background: rgba(124,106,255,0.2); color: var(--accent); }
+  .fmt-icon.audio { background: rgba(255,106,176,0.2); color: var(--accent-2); }
+  .fmt-icon.lossless { background: rgba(106,247,200,0.2); color: var(--accent-3); }
+
+  .fmt-name {
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--text);
+    margin-bottom: 2px;
+  }
+
+  .fmt-desc {
+    font-size: 0.65rem;
+    color: var(--text-dim);
+  }
+
+  .fmt-check {
+    position: absolute;
+    top: 10px; right: 10px;
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    display: none;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .fmt-check::after {
+    content: '✓';
+    font-size: 9px;
+    color: #fff;
+    font-weight: 700;
+  }
+
+  .fmt-card.active .fmt-check { display: flex; }
+
+  /* Quality Sliders */
+  .quality-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .q-group label {
+    display: block;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    margin-bottom: 7px;
+    font-weight: 500;
+  }
+
+  .q-select {
+    width: 100%;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    color: var(--text);
+    font-family: var(--body);
+    font-size: 0.82rem;
+    padding: 10px 14px;
+    outline: none;
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%237c6aff' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 14px center;
+    background-size: 10px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+
+  .q-select:focus {
+    border-color: rgba(124,106,255,0.5);
+    box-shadow: 0 0 0 3px rgba(124,106,255,0.08);
+  }
+
+  /* Options toggles */
+  .options-list {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .toggle-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    padding: 10px 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .toggle-item:hover {
+    background: var(--glass-hover);
+    border-color: rgba(255,255,255,0.12);
+  }
+
+  .toggle-label {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    font-weight: 400;
+  }
+
+  .toggle-item.on .toggle-label { color: var(--text); }
+
+  .toggle-switch {
+    width: 30px; height: 16px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 100px;
+    position: relative;
+    transition: background 0.2s;
+    flex-shrink: 0;
+  }
+
+  .toggle-switch::after {
+    content: '';
+    position: absolute;
+    width: 12px; height: 12px;
+    background: #fff;
+    border-radius: 50%;
+    top: 2px; left: 2px;
+    transition: transform 0.2s;
+  }
+
+  .toggle-item.on .toggle-switch {
+    background: linear-gradient(90deg, var(--accent), #9b6aff);
+  }
+
+  .toggle-item.on .toggle-switch::after {
+    transform: translateX(14px);
+  }
+
+  /* Output path */
+  .path-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    padding: 0 14px;
+    margin-top: 12px;
+    transition: border-color 0.2s;
+  }
+
+  .path-row:focus-within { border-color: rgba(124,106,255,0.4); }
+
+  .path-icon { color: var(--text-dim); font-size: 0.85rem; }
+
+  .path-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    padding: 10px 0;
+  }
+
+  .path-input::placeholder { color: var(--text-dim); }
+
+  /* Download Button */
+  .download-btn-wrap {
+    margin-bottom: 16px;
+  }
+
+  .btn-download {
+    width: 100%;
+    background: linear-gradient(135deg, var(--accent) 0%, #9b6aff 50%, var(--accent-2) 100%);
+    background-size: 200%;
+    border: none;
+    border-radius: var(--radius);
+    color: #fff;
+    font-family: var(--body);
+    font-size: 1rem;
+    font-weight: 600;
+    padding: 16px;
+    cursor: pointer;
+    transition: all 0.3s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .btn-download::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(255,255,255,0);
+    transition: background 0.2s;
+  }
+
+  .btn-download:hover {
+    background-position: right;
+    box-shadow: 0 12px 40px rgba(124,106,255,0.45);
+    transform: translateY(-2px);
+  }
+
+  .btn-download:active {
+    transform: translateY(0);
+    box-shadow: none;
+  }
+
+  .btn-download:disabled {
+    background: rgba(255,255,255,0.08);
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+    color: var(--text-dim);
+  }
+
+  .btn-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+  }
+
+  .btn-secondary {
+    flex: 1;
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    color: var(--text-muted);
+    font-family: var(--body);
+    font-size: 0.78rem;
+    padding: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn-secondary:hover {
+    background: var(--glass-hover);
+    color: var(--text);
+    border-color: rgba(255,255,255,0.14);
+  }
+
+  /* Progress */
+  #progress-block {
+    display: none;
+    padding: 20px;
+    margin-bottom: 16px;
+    animation: fadeUp 0.3s ease;
+  }
+
+  .progress-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 14px;
+  }
+
+  .progress-title {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+
+  .progress-pct {
+    font-size: 1.6rem;
+    font-weight: 300;
+    font-family: var(--mono);
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .progress-track {
+    height: 4px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 100px;
+    overflow: hidden;
+    margin-bottom: 14px;
+  }
+
+  .progress-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    border-radius: 100px;
+    transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 0 12px rgba(124,106,255,0.5);
+  }
+
+  .progress-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+
+  .stat-box {
+    background: rgba(255,255,255,0.03);
+    border-radius: 8px;
+    padding: 8px 12px;
+    text-align: center;
+  }
+
+  .stat-label {
+    font-size: 0.58rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 3px;
+  }
+
+  .stat-val {
+    font-size: 0.78rem;
+    font-family: var(--mono);
+    color: var(--text);
+  }
+
+  /* Log terminal */
+  .log-terminal {
+    margin-top: 12px;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 10px;
+    padding: 12px 14px;
+    max-height: 120px;
+    overflow-y: auto;
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    line-height: 1.9;
+    color: var(--text-dim);
+  }
+
+  .log-terminal .l-ok { color: var(--success); }
+  .log-terminal .l-err { color: var(--error); }
+  .log-terminal .l-info { color: var(--accent); }
+
+  /* History */
+  .history-section {
+    margin-top: 32px;
+  }
+
+  .section-title {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-weight: 500;
+    letter-spacing: 0.5px;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .section-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--glass-border);
+  }
+
+  .history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .history-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    font-size: 0.75rem;
+    transition: all 0.2s;
+    animation: fadeUp 0.3s ease;
+  }
+
+  .history-item:hover {
+    background: var(--glass-hover);
+    border-color: rgba(255,255,255,0.12);
+  }
+
+  .h-thumb {
+    width: 54px; height: 30px;
+    object-fit: cover;
+    border-radius: 6px;
+    background: rgba(255,255,255,0.05);
+    flex-shrink: 0;
+  }
+
+  .h-title { flex: 1; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .h-fmt { color: var(--accent); font-family: var(--mono); font-size: 0.65rem; }
+  .h-size { color: var(--text-dim); font-family: var(--mono); font-size: 0.65rem; }
+  .h-time { color: var(--text-dim); font-size: 0.65rem; white-space: nowrap; }
+
+  .no-history {
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 0.78rem;
+    padding: 24px;
+  }
+
+  /* CMD preview */
+  #cmd-preview {
+    display: none;
+    padding: 14px 16px;
+    margin-bottom: 16px;
+    animation: fadeUp 0.3s ease;
+  }
+
+  .cmd-header {
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 8px;
+  }
+
+  .cmd-text {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    color: var(--accent-3);
+    word-break: break-all;
+    line-height: 1.7;
+  }
+
+  /* Toast */
+  #toast {
+    position: fixed;
+    bottom: 28px; right: 28px;
+    background: rgba(20,22,36,0.95);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    backdrop-filter: blur(20px);
+    color: var(--text);
+    font-size: 0.8rem;
+    padding: 12px 18px;
+    z-index: 9999;
+    display: none;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    animation: fadeUp 0.3s ease;
+    max-width: 280px;
+  }
+
+  #toast.error { border-color: rgba(255,106,106,0.4); }
+  #toast.success { border-color: rgba(106,247,200,0.3); }
+
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(124,106,255,0.4); border-radius: 100px; }
+
+  @media (max-width: 640px) {
+    .format-grid { grid-template-columns: repeat(2, 1fr); }
+    .quality-grid { grid-template-columns: 1fr; }
+    .options-list { grid-template-columns: 1fr; }
+    .progress-stats { grid-template-columns: repeat(2, 1fr); }
+    .video-preview { flex-direction: column; }
+    .thumb-container { width: 100%; height: 160px; }
+  }
+</style>
+</head>
+<body>
+<div class="app-wrap">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="logo-wrap">
+      <div class="logo-icon">▶</div>
+      <div class="logo-text"><span>Prism</span> Downloader</div>
+    </div>
+    <div class="header-right">
+      <div class="pill">
+        <div class="pill-dot" id="status-dot"></div>
+        <span id="status-text">Checking...</span>
+      </div>
+      <div class="pill" id="clock-pill" style="font-family:var(--mono); font-size:0.7rem;"></div>
+    </div>
+  </div>
+
+  <!-- URL Input -->
+  <div class="card url-card">
+    <div class="url-icon">🔗</div>
+    <input class="url-input" id="url-input" type="text"
+      placeholder="Paste YouTube URL, playlist, or channel link…" />
+    <button class="btn-analyse" id="btn-analyse" onclick="fetchInfo()">Analyse</button>
+  </div>
+
+  <!-- Video Preview -->
+  <div class="card" id="video-info">
+    <div class="video-preview">
+      <div class="thumb-container">
+        <img id="thumb" src="" alt="thumb">
+        <div class="duration-badge" id="duration">—</div>
+      </div>
+      <div class="video-details">
+        <div class="video-title" id="v-title">—</div>
+        <div class="video-meta" id="v-meta"></div>
+        <div class="video-uploader" id="v-uploader">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Config Tabs -->
+  <div class="config-section">
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab(this,'format')">Format</button>
+      <button class="tab" onclick="switchTab(this,'quality')">Quality</button>
+      <button class="tab" onclick="switchTab(this,'options')">Options</button>
+    </div>
+
+    <!-- Format -->
+    <div class="tab-panel active" id="tab-format">
+      <div class="format-grid">
+        <div class="fmt-card active" onclick="selectFmt(this,'mp4')">
+          <div class="fmt-check"></div>
+          <div class="fmt-icon video">MP4</div>
+          <div class="fmt-name">MP4</div>
+          <div class="fmt-desc">Video + audio</div>
+        </div>
+        <div class="fmt-card" onclick="selectFmt(this,'mp3')">
+          <div class="fmt-check"></div>
+          <div class="fmt-icon audio">MP3</div>
+          <div class="fmt-name">MP3</div>
+          <div class="fmt-desc">Audio only</div>
+        </div>
+        <div class="fmt-card" onclick="selectFmt(this,'webm')">
+          <div class="fmt-check"></div>
+          <div class="fmt-icon video">WBM</div>
+          <div class="fmt-name">WebM</div>
+          <div class="fmt-desc">Web-optimised</div>
+        </div>
+        <div class="fmt-card" onclick="selectFmt(this,'m4a')">
+          <div class="fmt-check"></div>
+          <div class="fmt-icon audio">M4A</div>
+          <div class="fmt-name">M4A</div>
+          <div class="fmt-desc">AAC audio</div>
+        </div>
+        <div class="fmt-card" onclick="selectFmt(this,'flac')">
+          <div class="fmt-check"></div>
+          <div class="fmt-icon lossless">FLC</div>
+          <div class="fmt-name">FLAC</div>
+          <div class="fmt-desc">Lossless audio</div>
+        </div>
+        <div class="fmt-card" onclick="selectFmt(this,'wav')">
+          <div class="fmt-check"></div>
+          <div class="fmt-icon lossless">WAV</div>
+          <div class="fmt-name">WAV</div>
+          <div class="fmt-desc">Uncompressed</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quality -->
+    <div class="tab-panel" id="tab-quality">
+      <div class="quality-grid">
+        <div class="q-group">
+          <label>Video Resolution</label>
+          <select class="q-select" id="q-res">
+            <option value="best">Best Available</option>
+            <option value="2160">4K — 2160p</option>
+            <option value="1440">QHD — 1440p</option>
+            <option value="1080" selected>FHD — 1080p</option>
+            <option value="720">HD — 720p</option>
+            <option value="480">SD — 480p</option>
+            <option value="360">Low — 360p</option>
+          </select>
+        </div>
+        <div class="q-group">
+          <label>Audio Bitrate</label>
+          <select class="q-select" id="q-audio">
+            <option value="best">Best</option>
+            <option value="320">320 kbps</option>
+            <option value="256" selected>256 kbps</option>
+            <option value="192">192 kbps</option>
+            <option value="128">128 kbps</option>
+          </select>
+        </div>
+        <div class="q-group">
+          <label>Video Codec</label>
+          <select class="q-select" id="q-vcodec">
+            <option value="any">Auto (Recommended)</option>
+            <option value="h264">H.264 / AVC</option>
+            <option value="h265">H.265 / HEVC</option>
+            <option value="vp9">VP9</option>
+            <option value="av1">AV1</option>
+          </select>
+        </div>
+        <div class="q-group">
+          <label>Container</label>
+          <select class="q-select" id="q-merge">
+            <option value="mp4">MP4 (most compatible)</option>
+            <option value="mkv">MKV (flexible)</option>
+            <option value="webm">WebM</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Options -->
+    <div class="tab-panel" id="tab-options">
+      <div class="options-list">
+        <div class="toggle-item" onclick="toggleOpt(this)" id="opt-subs">
+          <span class="toggle-label">Embed subtitles</span>
+          <div class="toggle-switch"></div>
+        </div>
+        <div class="toggle-item" onclick="toggleOpt(this)" id="opt-thumb">
+          <span class="toggle-label">Embed thumbnail</span>
+          <div class="toggle-switch"></div>
+        </div>
+        <div class="toggle-item" onclick="toggleOpt(this)" id="opt-meta">
+          <span class="toggle-label">Add metadata</span>
+          <div class="toggle-switch"></div>
+        </div>
+        <div class="toggle-item" onclick="toggleOpt(this)" id="opt-playlist">
+          <span class="toggle-label">Download playlist</span>
+          <div class="toggle-switch"></div>
+        </div>
+        <div class="toggle-item" onclick="toggleOpt(this)" id="opt-sb">
+          <span class="toggle-label">SponsorBlock</span>
+          <div class="toggle-switch"></div>
+        </div>
+        <div class="toggle-item" onclick="toggleOpt(this)" id="opt-chapters">
+          <span class="toggle-label">Chapter markers</span>
+          <div class="toggle-switch"></div>
+        </div>
+        <div class="toggle-item" onclick="toggleOpt(this)" id="opt-split">
+          <span class="toggle-label">Split by chapters</span>
+          <div class="toggle-switch"></div>
+        </div>
+        <div class="toggle-item" onclick="toggleOpt(this)" id="opt-desc">
+          <span class="toggle-label">Save description</span>
+          <div class="toggle-switch"></div>
+        </div>
+      </div>
+      <div class="path-row">
+        <span class="path-icon">📁</span>
+        <input class="path-input" id="out-path" placeholder="Output path: ~/Downloads/%(title)s.%(ext)s">
+      </div>
+    </div>
+  </div>
+
+  <!-- Command preview -->
+  <div class="card" id="cmd-preview">
+    <div class="cmd-header">Generated command</div>
+    <div class="cmd-text" id="cmd-text">—</div>
+  </div>
+
+  <!-- Download -->
+  <div class="download-btn-wrap">
+    <button class="btn-download" id="btn-download" onclick="startDownload()" disabled>
+      Download
+    </button>
+    <div class="btn-row">
+      <button class="btn-secondary" onclick="copyCommand()">📋 Copy yt-dlp command</button>
+      <button class="btn-secondary" onclick="clearHistory()">🗑 Clear history</button>
+    </div>
+  </div>
+
+  <!-- Progress -->
+  <div class="card" id="progress-block">
+    <div class="progress-header">
+      <div class="progress-title">Downloading…</div>
+      <div class="progress-pct" id="prog-pct">0%</div>
+    </div>
+    <div class="progress-track">
+      <div class="progress-fill" id="prog-fill"></div>
+    </div>
+    <div class="progress-stats">
+      <div class="stat-box">
+        <div class="stat-label">Speed</div>
+        <div class="stat-val" id="s-speed">—</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">ETA</div>
+        <div class="stat-val" id="s-eta">—</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Size</div>
+        <div class="stat-val" id="s-size">—</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Fragment</div>
+        <div class="stat-val" id="s-frag">—</div>
+      </div>
+    </div>
+    <div class="log-terminal" id="log-terminal"></div>
+  </div>
+
+  <!-- History -->
+  <div class="history-section">
+    <div class="section-title">Recent Downloads</div>
+    <div class="history-list" id="history-list">
+      <div class="no-history">No downloads yet — start by pasting a URL above.</div>
+    </div>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+const API = 'http://localhost:8080';
+let selectedFmt = 'mp4';
+let currentVideo = null;
+let history = JSON.parse(localStorage.getItem('prism_history') || '[]');
+
+// Clock
+setInterval(() => {
+  const now = new Date();
+  const el = document.getElementById('clock-pill');
+  if (el) el.textContent = now.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}, 1000);
+
+// Backend check
+async function checkBackend() {
+  const dot = document.getElementById('status-dot');
+  const txt = document.getElementById('status-text');
+  try {
+    const r = await fetch(API + '/ping', {signal: AbortSignal.timeout(2000)});
+    if (r.ok) {
+      dot.className = 'pill-dot';
+      txt.textContent = 'Backend online';
+    } else throw new Error();
+  } catch {
+    dot.className = 'pill-dot offline';
+    txt.textContent = 'Backend offline';
+  }
+}
+checkBackend();
+setInterval(checkBackend, 10000);
+
+// Tabs
+function switchTab(el, id) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('tab-' + id).classList.add('active');
+}
+
+// Format
+function selectFmt(el, fmt) {
+  document.querySelectorAll('.fmt-card').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  selectedFmt = fmt;
+  const isAudio = ['mp3','m4a','flac','wav'].includes(fmt);
+  document.getElementById('q-res').disabled = isAudio;
+  document.getElementById('q-vcodec').disabled = isAudio;
+  document.getElementById('q-merge').disabled = isAudio;
+  updateCommand();
+}
+
+// Toggle
+function toggleOpt(el) {
+  el.classList.toggle('on');
+  updateCommand();
+}
+
+// Fetch
+async function fetchInfo() {
+  const url = document.getElementById('url-input').value.trim();
+  if (!url) { toast('Paste a URL first', 'error'); return; }
+  const btn = document.getElementById('btn-analyse');
+  btn.textContent = 'Analysing…';
+  btn.disabled = true;
+
+  try {
+    const r = await fetch(API + '/info', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({url})
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Request failed');
+    currentVideo = d;
+    renderInfo(d);
+    document.getElementById('btn-download').disabled = false;
+    updateCommand();
+    toast('Video loaded', 'success');
+  } catch (e) {
+    toast(e.message, 'error');
+  } finally {
+    btn.textContent = 'Analyse';
+    btn.disabled = false;
+  }
+}
+
+function renderInfo(d) {
+  document.getElementById('video-info').style.display = 'block';
+  document.getElementById('thumb').src = d.thumbnail || '';
+  document.getElementById('duration').textContent = fmtDur(d.duration);
+  document.getElementById('v-title').textContent = d.title || 'Unknown';
+  document.getElementById('v-uploader').textContent = (d.uploader || '') + (d.upload_date ? '  ·  ' + fmtDate(d.upload_date) : '');
+
+  const meta = document.getElementById('v-meta');
+  meta.innerHTML = '';
+  if (d.is_live) meta.innerHTML += '<span class="meta-chip pink">● Live</span>';
+  if (d.playlist_count > 1) meta.innerHTML += `<span class="meta-chip accent">Playlist · ${d.playlist_count}</span>`;
+  if (d.width) meta.innerHTML += `<span class="meta-chip">${d.width}×${d.height}</span>`;
+  if (d.fps) meta.innerHTML += `<span class="meta-chip">${d.fps} fps</span>`;
+  if (d.view_count) meta.innerHTML += `<span class="meta-chip green">${(d.view_count/1000).toFixed(0)}K views</span>`;
+}
+
+function fmtDur(s) {
+  if (!s) return '—';
+  const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = s%60;
+  return h ? `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`
+           : `${m}:${String(sec).padStart(2,'0')}`;
+}
+
+function fmtDate(d) {
+  return d ? d.slice(0,4)+'-'+d.slice(4,6)+'-'+d.slice(6,8) : '—';
+}
+
+// Download
+async function startDownload() {
+  const url = document.getElementById('url-input').value.trim();
+  if (!url) return;
+
+  const getOpt = id => document.getElementById(id).classList.contains('on');
+
+  const opts = {
+    url,
+    format: selectedFmt,
+    quality: document.getElementById('q-res').value,
+    audio_quality: document.getElementById('q-audio').value,
+    vcodec: document.getElementById('q-vcodec').value,
+    subtitles: getOpt('opt-subs'),
+    thumbnail: getOpt('opt-thumb'),
+    metadata: getOpt('opt-meta'),
+    playlist: getOpt('opt-playlist'),
+    sponsorblock: getOpt('opt-sb'),
+    chapters: getOpt('opt-chapters'),
+    split_chapters: getOpt('opt-split'),
+    output: document.getElementById('out-path').value || '',
+  };
+
+  document.getElementById('btn-download').disabled = true;
+  document.getElementById('progress-block').style.display = 'block';
+  document.getElementById('log-terminal').innerHTML = '';
+  updateProgress(0);
+
+  try {
+    const r = await fetch(API + '/download', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(opts)
+    });
+    const reader = r.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, {stream:true});
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try { handleEvent(JSON.parse(line)); } catch {}
+      }
+    }
+  } catch (e) {
+    toast(e.message, 'error');
+    addLog('Error: ' + e.message, 'l-err');
+  } finally {
+    document.getElementById('btn-download').disabled = false;
+  }
+}
+
+function handleEvent(ev) {
+  if (ev.type === 'progress') {
+    updateProgress(ev.percent);
+    document.getElementById('s-speed').textContent = ev.speed || '—';
+    document.getElementById('s-eta').textContent = ev.eta || '—';
+    document.getElementById('s-size').textContent = ev.size || '—';
+    document.getElementById('s-frag').textContent = ev.fragment || '—';
+  } else if (ev.type === 'log') {
+    addLog(ev.msg, ev.level === 'ok' ? 'l-ok' : ev.level === 'err' ? 'l-err' : 'l-info');
+  } else if (ev.type === 'done') {
+    updateProgress(100);
+    document.getElementById('s-eta').textContent = '✓ Done';
+    toast('Download complete!', 'success');
+    addLog('Saved: ' + ev.filename, 'l-ok');
+    addHistory(ev);
+  } else if (ev.type === 'error') {
+    addLog(ev.msg, 'l-err');
+    toast(ev.msg, 'error');
+  }
+}
+
+function updateProgress(pct) {
+  document.getElementById('prog-fill').style.width = pct + '%';
+  document.getElementById('prog-pct').textContent = Math.round(pct) + '%';
+}
+
+function addLog(msg, cls='') {
+  const t = document.getElementById('log-terminal');
+  const s = document.createElement('span');
+  s.className = cls;
+  s.style.display = 'block';
+  s.textContent = '› ' + msg;
+  t.appendChild(s);
+  t.scrollTop = t.scrollHeight;
+}
+
+// History
+function addHistory(ev) {
+  const entry = {
+    title: currentVideo?.title || 'Unknown',
+    thumb: currentVideo?.thumbnail || '',
+    format: selectedFmt,
+    size: ev.size || '—',
+    time: new Date().toLocaleTimeString(),
+  };
+  history.unshift(entry);
+  if (history.length > 20) history = history.slice(0,20);
+  localStorage.setItem('prism_history', JSON.stringify(history));
+  renderHistory();
+}
+
+function renderHistory() {
+  const list = document.getElementById('history-list');
+  if (!history.length) {
+    list.innerHTML = '<div class="no-history">No downloads yet — start by pasting a URL above.</div>';
+    return;
+  }
+  list.innerHTML = history.slice(0,8).map(h => `
+    <div class="history-item">
+      ${h.thumb ? `<img class="h-thumb" src="${h.thumb}">` : '<div class="h-thumb"></div>'}
+      <span class="h-title">${h.title}</span>
+      <span class="h-fmt">${h.format.toUpperCase()}</span>
+      <span class="h-size">${h.size}</span>
+      <span class="h-time">${h.time}</span>
+    </div>
+  `).join('');
+}
+
+function clearHistory() {
+  history = [];
+  localStorage.removeItem('prism_history');
+  renderHistory();
+  toast('History cleared', 'success');
+}
+
+renderHistory();
+
+// Command
+function buildCommand() {
+  const url = document.getElementById('url-input').value.trim() || '<URL>';
+  const isAudio = ['mp3','m4a','flac','wav'].includes(selectedFmt);
+  const q = document.getElementById('q-res').value;
+  const aq = document.getElementById('q-audio').value;
+  const vc = document.getElementById('q-vcodec').value;
+  const out = document.getElementById('out-path').value;
+  const getOpt = id => document.getElementById(id).classList.contains('on');
+
+  let cmd = 'yt-dlp';
+  if (isAudio) {
+    cmd += ` -x --audio-format ${selectedFmt}`;
+    if (aq !== 'best') cmd += ` --audio-quality ${aq}k`;
+  } else {
+    let fmtStr = q === 'best' ? 'bestvideo+bestaudio/best' : `bestvideo[height<=${q}]+bestaudio/best`;
+    cmd += ` -f "${fmtStr}" --merge-output-format ${selectedFmt}`;
+  }
+  if (getOpt('opt-subs')) cmd += ' --embed-subs --sub-langs all';
+  if (getOpt('opt-thumb')) cmd += ' --embed-thumbnail';
+  if (getOpt('opt-meta')) cmd += ' --embed-metadata';
+  if (getOpt('opt-sb')) cmd += ' --sponsorblock-remove sponsor';
+  if (getOpt('opt-chapters')) cmd += ' --embed-chapters';
+  if (getOpt('opt-split')) cmd += ' --split-chapters';
+  if (out) cmd += ` -o "${out}"`;
+  cmd += ` "${url}"`;
+  return cmd;
+}
+
+function updateCommand() {
+  const cmd = buildCommand();
+  document.getElementById('cmd-text').textContent = cmd;
+  document.getElementById('cmd-preview').style.display = 'block';
+}
+
+function copyCommand() {
+  navigator.clipboard.writeText(buildCommand()).then(() => toast('Copied!', 'success'));
+}
+
+document.getElementById('url-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') fetchInfo();
+});
+
+// Trigger initial command
+updateCommand();
+
+function toast(msg, type='') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = type;
+  t.style.display = 'block';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.style.display = 'none', 3200);
+}
+</script>
+</body>
+</html>
