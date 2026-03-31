@@ -1425,6 +1425,18 @@ function triggerBrowserDownload(fileName) {
   a.remove();
   
   toast("Dosya tarayıcınıza aktarılıyor...", "success");
+
+if (data.status === 'complete') {
+  toast('Finished!', 'success');
+  btn.disabled = false;
+  btn.textContent = 'Download';
+  progressContainer.style.display = 'none';
+  
+  // İŞTE KRİTİK SATIR: Backend bitti dediğinde tarayıcı indirmesini başlat
+  if (data.filename) {
+      triggerBrowserDownload(data.filename);
+  }
+}
 }
 }
 }
