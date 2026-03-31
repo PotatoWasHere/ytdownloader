@@ -186,27 +186,51 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, ngrok-skip-browser-warning")
-        self.send_header("Access-Control-Expose-Headers", "Content-Disposition")
 
     def do_OPTIONS(self):
         self.send_response(200)
         self.send_cors()
         self.end_headers()
 
-    def do_GET(self):
-        path = self.path.split('?')[0].rstrip('/')
+import mimetypes
 
-        if path == "/ping" or path == "":
-            self._json({"status": "ok", "yt_dlp": YT_DLP_AVAILABLE})
-        elif path == "/version":
-            ver = yt_dlp.version.__version__ if YT_DLP_AVAILABLE else "not installed"
-            self._json({"yt_dlp_version": ver})
-        elif path.startswith("/file/"):
-            file_id = path.split("/file/")[-1]
-            self._serve_file(file_id)
+# ... (mevcut importlar)
+
+def do_GET(self):
+    # URL'yi ve parametreleri ayır
+    parsed_path = urlparse(self.path)
+    path = parsed_path.path.rstrip('/')
+    query = parse_qs(parsed_path.query)
+
+    if path == "/ping":
+        self._json({"status": "ok"})
+
+    # YENİ: Dosyayı indirme isteği geldiğinde
+    elif path == "/get_file":
+        filename = query.get('name', [None])[0]
+        if not filename:
+            self._json({"error": "Dosya adı eksik"}, 400)
+            return
+
+        # Dosya yolunu oluştur (indirilenler klasöründe ara)
+        file_path = os.path.join(DOWNLOAD_DIR, filename)
+
+        if os.path.exists(file_path):
+            self.send_response(200)
+            self.send_cors() # CORS başlıkları çok önemli!
+            
+            # Dosya türünü belirle (mp4, mp3 vb.)
+            mime_type, _ = mimetypes.guess_type(file_path)
+            self.send_header("Content-Type", mime_type or "application/octet-stream")
+            self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+            self.send_header("Content-Length", str(os.path.getsize(file_path)))
+            self.end_headers()
+
+            # Dosyayı kullanıcıya gönder
+            with open(file_path, 'rb') as f:
+                shutil.copyfileobj(f, self.wfile)
         else:
-            print(f"  404: {self.path}")
-            self._json({"error": "Not found", "path_received": self.path}, 404)
+            self._json({"error": "Dosya sunucuda bulunamadı"}, 404)
 
     def do_POST(self):
         length  = int(self.headers.get("Content-Length", 0))
