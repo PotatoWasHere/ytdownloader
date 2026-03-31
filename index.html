@@ -1406,6 +1406,18 @@ function toast(msg, type='') {
   t.style.display = 'block';
   clearTimeout(t._timer);
   t._timer = setTimeout(() => t.style.display = 'none', 3200);
+
+function dosyayiBilgisayaraIndir(indirilenDosyaAdi) {
+    const backendUrl = config.backend_url; // ngrok adresin
+    
+    // Kullanıcının tarayıcısında gerçek indirmeyi başlatan gizli link
+    const link = document.createElement('a');
+    link.href = `${backendUrl}/get_file?name=${encodeURIComponent(indirilenDosyaAdi)}`;
+    link.setAttribute('download', indirilenDosyaAdi);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+}
 }
 </script>
 </body>
