@@ -1120,7 +1120,10 @@ async function checkBackend() {
   const txt = document.getElementById('status-text');
   if (!API) { dot.className = 'pill-dot offline'; txt.textContent = 'Backend offline'; return; }
   try {
-    const r = await fetch(API + '/ping', {signal: AbortSignal.timeout(4000)});
+    const r = await fetch(API + '/ping', {
+      signal: AbortSignal.timeout(4000),
+      headers: { 'ngrok-skip-browser-warning': '1' }
+    });
     if (r.ok) {
       dot.className = 'pill-dot';
       txt.textContent = 'Backend online';
@@ -1171,7 +1174,7 @@ async function fetchInfo() {
   try {
     const r = await fetch(API + '/info', {
       method: 'POST',
-      headers: {'Content-Type':'application/json'},
+      headers: {'Content-Type':'application/json', 'ngrok-skip-browser-warning': '1'},
       body: JSON.stringify({url})
     });
     const d = await r.json();
@@ -1247,7 +1250,7 @@ async function startDownload() {
   try {
     const r = await fetch(API + '/download', {
       method: 'POST',
-      headers: {'Content-Type':'application/json'},
+      headers: {'Content-Type':'application/json', 'ngrok-skip-browser-warning': '1'},
       body: JSON.stringify(opts)
     });
     const reader = r.body.getReader();
