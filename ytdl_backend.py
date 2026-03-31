@@ -26,6 +26,34 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
+from flask import Flask
+from flask_cors import CORS
+
+app = Flask(__name__)
+
+# Tüm kökenlere (*) ve özel ngrok başlığına izin ver
+CORS(app, resources={r"/*": {
+    "origins": "*",
+    "allow_headers": ["Content-Type", "ngrok-skip-browser-warning"]
+}})
+
+@app.route('/ping')
+def ping():
+    return {"status": "online"}
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*", "ngrok-skip-browser-warning"], # Buraya ekledik
+)
+
 try:
     import yt_dlp
     YT_DLP_AVAILABLE = True
