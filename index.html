@@ -1406,32 +1406,25 @@ function toast(msg, type='') {
   t.style.display = 'block';
   clearTimeout(t._timer);
   t._timer = setTimeout(() => t.style.display = 'none', 3200);
+} // Bu süslü parantez eksikti, o yüzden kod çalışmıyordu.
 
-function dosyayiBilgisayaraIndir(indirilenDosyaAdi) {
-    const backendUrl = config.backend_url; // ngrok adresin
-    
-    // Kullanıcının tarayıcısında gerçek indirmeyi başlatan gizli link
-    const link = document.createElement('a');
-    link.href = `${backendUrl}/get_file?name=${encodeURIComponent(indirilenDosyaAdi)}`;
-    link.setAttribute('download', indirilenDosyaAdi);
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-  
 function triggerBrowserDownload(fileName) {
-    const backendUrl = config.backend_url; // ngrok linkin (https://... formatında)
-    
-    // Kullanıcıya dosyayı indirmesi için gizli bir link oluştur ve tıkla
-    const downloadUrl = `${backendUrl}/get_file?name=${encodeURIComponent(fileName)}`;
-    
-    const a = document.createElement('a');
-    a.href = downloadUrl;
-    a.download = fileName; // Tarayıcıya dosya adını söyler
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    
-    console.log("Dosya aktarımı başlatıldı: " + fileName);
+  // Config'den gelen URL'nin başında https:// yoksa ekle
+  let backendUrl = config.backend_url;
+  if (!backendUrl.startsWith('http')) {
+      backendUrl = 'https://' + backendUrl;
+  }
+  
+  const downloadUrl = `${backendUrl}/get_file?name=${encodeURIComponent(fileName)}`;
+  
+  const a = document.createElement('a');
+  a.href = downloadUrl;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  
+  toast("Dosya tarayıcınıza aktarılıyor...", "success");
 }
 }
 }
