@@ -169,6 +169,7 @@ class Handler(BaseHTTPRequestHandler):
     def send_cors(self):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        # BURASI ÇOK ÖNEMLİ: ngrok-skip-browser-warning başlığını buraya eklemezsen tarayıcı isteği bloklar
         self.send_header("Access-Control-Allow-Headers", "Content-Type, ngrok-skip-browser-warning")
 
     def do_OPTIONS(self):
@@ -177,13 +178,18 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
-        if self.path == "/ping":
+        # Gelen yolu temizle: sonundaki '/' işaretini ve varsa ? sorgularını sil
+        path = self.path.split('?')[0].rstrip('/')
+    
+        if path == "/ping" or path == "":
             self._json({"status": "ok", "yt_dlp": YT_DLP_AVAILABLE})
-        elif self.path == "/version":
+        elif path == "/version":
             ver = yt_dlp.version.__version__ if YT_DLP_AVAILABLE else "not installed"
             self._json({"yt_dlp_version": ver})
         else:
-            self._json({"error": "Not found"}, 404)
+            # Hangi yolun 404 verdiğini terminalde görmek için print ekleyelim
+            print(f"404 Hatası Veren Yol: {self.path}")
+            self._json({"error": "Not found", "path_received": self.path}, 404)
 
     def do_POST(self):
         length  = int(self.headers.get("Content-Length", 0))
