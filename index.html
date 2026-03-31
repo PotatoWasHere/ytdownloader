@@ -1417,6 +1417,22 @@ function dosyayiBilgisayaraIndir(indirilenDosyaAdi) {
     document.body.appendChild(link);
     link.click();
     link.remove();
+  
+function triggerBrowserDownload(fileName) {
+    const backendUrl = config.backend_url; // ngrok linkin (https://... formatında)
+    
+    // Kullanıcıya dosyayı indirmesi için gizli bir link oluştur ve tıkla
+    const downloadUrl = `${backendUrl}/get_file?name=${encodeURIComponent(fileName)}`;
+    
+    const a = document.createElement('a');
+    a.href = downloadUrl;
+    a.download = fileName; // Tarayıcıya dosya adını söyler
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    
+    console.log("Dosya aktarımı başlatıldı: " + fileName);
+}
 }
 }
 </script>
