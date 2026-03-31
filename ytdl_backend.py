@@ -2,7 +2,6 @@
 """
 YouTube Downloader Backend
 Powered by yt-dlp + ffmpeg
-Serves both V1 (YTDL RIPPED) and V2 (Prism) frontends
 
 Install dependencies:
     pip install yt-dlp
@@ -16,43 +15,25 @@ Run:
     python ytdl_backend.py
 
 Server listens on http://localhost:8080
+
+ARCHITECTURE:
+    1. POST /download  → streams NDJSON progress events,
+       finishes with a {"type":"done", "file_id":"<uuid>"} event.
+    2. GET  /file/<uuid> → serves the actual bytes to the user's browser
+       (Content-Disposition: attachment), then deletes the temp file.
 """
 
 import json
+import mimetypes
 import os
 import re
+import shutil
+import tempfile
 import threading
+import uuid
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
-
-from flask import Flask
-from flask_cors import CORS
-
-app = Flask(__name__)
-
-# Tüm kökenlere (*) ve özel ngrok başlığına izin ver
-CORS(app, resources={r"/*": {
-    "origins": "*",
-    "allow_headers": ["Content-Type", "ngrok-skip-browser-warning"]
-}})
-
-@app.route('/ping')
-def ping():
-    return {"status": "online"}
-
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-
-app = FastAPI()
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*", "ngrok-skip-browser-warning"], # Buraya ekledik
-)
 
 try:
     import yt_dlp
@@ -61,14 +42,52 @@ except ImportError:
     YT_DLP_AVAILABLE = False
     print("WARNING: yt-dlp not found. Run: pip install yt-dlp")
 
-HOST = "localhost"
+HOST = "0.0.0.0"   # listen on all interfaces (important for ngrok / remote access)
 PORT = 8080
-DOWNLOAD_DIR = str(Path.home() / "Downloads")
+
+# Temporary directory where yt-dlp downloads go before being served to the client
+TEMP_DIR = os.path.join(tempfile.gettempdir(), "ytdl_serve")
+os.makedirs(TEMP_DIR, exist_ok=True)
+
+# In-memory map: file_id → {"path": str, "filename": str, "created": float}
+# Files are cleaned up after they are served or after a timeout.
+_ready_files: dict = {}
+_ready_lock = threading.Lock()
+
+# ─────────────────────────────────────────────
+# Helper: register a completed download for serving
+# ─────────────────────────────────────────────
+def register_file(file_path: str) -> str:
+    """Move/register a downloaded file and return a unique file_id."""
+    import time
+    file_id = uuid.uuid4().hex[:12]
+    filename = os.path.basename(file_path)
+    # Move (or copy) into our temp serve directory with the unique id prefix
+    serve_path = os.path.join(TEMP_DIR, f"{file_id}_{filename}")
+    shutil.move(file_path, serve_path)
+    with _ready_lock:
+        _ready_files[file_id] = {
+            "path": serve_path,
+            "filename": filename,
+            "created": time.time(),
+        }
+    # Auto-cleanup after 10 minutes if not fetched
+    def cleanup():
+        import time as _t
+        _t.sleep(600)
+        with _ready_lock:
+            info = _ready_files.pop(file_id, None)
+        if info and os.path.exists(info["path"]):
+            os.remove(info["path"])
+            print(f"  [cleanup] Expired temp file: {info['filename']}")
+    threading.Thread(target=cleanup, daemon=True).start()
+    return file_id
+
 
 # ─────────────────────────────────────────────
 # Helper: build yt-dlp options from request
 # ─────────────────────────────────────────────
-def build_ydl_opts(params: dict, progress_hook=None, output_dir: str = DOWNLOAD_DIR) -> dict:
+def build_ydl_opts(params: dict, progress_hook=None, output_dir: str = "") -> dict:
     fmt       = params.get("format", "mp4").lower()
     quality   = params.get("quality", "best")
     aq        = params.get("audio_quality", "best")
@@ -80,7 +99,6 @@ def build_ydl_opts(params: dict, progress_hook=None, output_dir: str = DOWNLOAD_
     sb        = params.get("sponsorblock", False)
     chapters  = params.get("chapters", False)
     split     = params.get("split_chapters", False)
-    out_tpl   = params.get("output", "")
 
     AUDIO_FORMATS = {"mp3", "m4a", "flac", "wav", "opus", "aac"}
     is_audio = fmt in AUDIO_FORMATS
@@ -99,7 +117,7 @@ def build_ydl_opts(params: dict, progress_hook=None, output_dir: str = DOWNLOAD_
         opts["postprocessors"] = [{
             "key": "FFmpegExtractAudio",
             "preferredcodec": fmt,
-            **({"preferredquality": str(aq)} if aq != "best" else {}),
+            **({**{"preferredquality": str(aq)}} if aq != "best" else {}),
         }]
     else:
         if quality == "best":
@@ -144,11 +162,10 @@ def build_ydl_opts(params: dict, progress_hook=None, output_dir: str = DOWNLOAD_
                     "remove_sponsor_segments": ["sponsor"],
                     "sponsorblock_chapter_title": "[SponsorBlock]: %(category_names)l"})
 
-    # ─── Output template ───
-    if out_tpl:
-        opts["outtmpl"] = out_tpl
-    else:
-        opts["outtmpl"] = os.path.join(output_dir, "%(title)s.%(ext)s")
+    # ─── Output template (always to temp dir) ───
+    if not output_dir:
+        output_dir = TEMP_DIR
+    opts["outtmpl"] = os.path.join(output_dir, "%(title)s.%(ext)s")
 
     # ─── Progress hook ───
     if progress_hook:
@@ -163,14 +180,13 @@ def build_ydl_opts(params: dict, progress_hook=None, output_dir: str = DOWNLOAD_
 class Handler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
-        # Simple console logging
         print(f"  [{self.command}] {self.path}  {args[1] if len(args) > 1 else ''}")
 
     def send_cors(self):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        # BURASI ÇOK ÖNEMLİ: ngrok-skip-browser-warning başlığını buraya eklemezsen tarayıcı isteği bloklar
         self.send_header("Access-Control-Allow-Headers", "Content-Type, ngrok-skip-browser-warning")
+        self.send_header("Access-Control-Expose-Headers", "Content-Disposition")
 
     def do_OPTIONS(self):
         self.send_response(200)
@@ -178,17 +194,18 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
-        # Gelen yolu temizle: sonundaki '/' işaretini ve varsa ? sorgularını sil
         path = self.path.split('?')[0].rstrip('/')
-    
+
         if path == "/ping" or path == "":
             self._json({"status": "ok", "yt_dlp": YT_DLP_AVAILABLE})
         elif path == "/version":
             ver = yt_dlp.version.__version__ if YT_DLP_AVAILABLE else "not installed"
             self._json({"yt_dlp_version": ver})
+        elif path.startswith("/file/"):
+            file_id = path.split("/file/")[-1]
+            self._serve_file(file_id)
         else:
-            # Hangi yolun 404 verdiğini terminalde görmek için print ekleyelim
-            print(f"404 Hatası Veren Yol: {self.path}")
+            print(f"  404: {self.path}")
             self._json({"error": "Not found", "path_received": self.path}, 404)
 
     def do_POST(self):
@@ -207,6 +224,45 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self._json({"error": "Not found"}, 404)
 
+    # ── SERVE FILE TO USER'S BROWSER ─────────
+    def _serve_file(self, file_id: str):
+        """Stream the downloaded file to the user's browser, then delete it."""
+        with _ready_lock:
+            info = _ready_files.pop(file_id, None)
+
+        if not info or not os.path.exists(info["path"]):
+            self._json({"error": "File not found or already downloaded"}, 404)
+            return
+
+        file_path = info["path"]
+        filename  = info["filename"]
+
+        try:
+            mime_type, _ = mimetypes.guess_type(filename)
+            if not mime_type:
+                mime_type = "application/octet-stream"
+
+            file_size = os.path.getsize(file_path)
+
+            self.send_response(200)
+            self.send_cors()
+            self.send_header("Content-Type", mime_type)
+            self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+            self.send_header("Content-Length", str(file_size))
+            self.end_headers()
+
+            with open(file_path, "rb") as f:
+                shutil.copyfileobj(f, self.wfile)
+
+            # Clean up the temp file after successful transfer
+            os.remove(file_path)
+            print(f"  ✓ Served & cleaned: {filename} ({file_size} bytes)")
+
+        except BrokenPipeError:
+            print(f"  ✗ Client disconnected while serving: {filename}")
+        except Exception as e:
+            print(f"  ✗ Error serving file: {e}")
+
     # ── GET INFO ──────────────────────────────
     def _handle_info(self, body):
         if not YT_DLP_AVAILABLE:
@@ -222,7 +278,6 @@ class Handler(BaseHTTPRequestHandler):
             with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True, "noplaylist": True}) as ydl:
                 info = ydl.extract_info(url, download=False)
 
-            # Return clean subset of metadata
             payload = {
                 "title":          info.get("title"),
                 "uploader":       info.get("uploader"),
@@ -256,7 +311,7 @@ class Handler(BaseHTTPRequestHandler):
                     }
                     for f in (info.get("formats") or [])
                     if f.get("height") or f.get("acodec") != "none"
-                ][-20:],  # last 20 best formats
+                ][-20:],
             }
             self._json(payload)
 
@@ -265,7 +320,7 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:
             self._json({"error": str(e)}, 500)
 
-    # ── DOWNLOAD (streaming progress) ─────────
+    # ── DOWNLOAD (streaming progress → then file_id for browser download) ───
     def _handle_download(self, body):
         if not YT_DLP_AVAILABLE:
             self._send_event({"type": "error", "msg": "yt-dlp not installed"})
@@ -276,7 +331,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send_event({"type": "error", "msg": "No URL provided"})
             return
 
-        # Set up streaming response
+        # Set up NDJSON streaming response
         self.send_response(200)
         self.send_cors()
         self.send_header("Content-Type", "application/x-ndjson")
@@ -317,7 +372,7 @@ class Handler(BaseHTTPRequestHandler):
                 with lock:
                     result["filename"] = fn
                     result["filesize"] = sz
-                self._stream_event({"type": "log", "msg": f"Merging / post-processing…", "level": "info"})
+                self._stream_event({"type": "log", "msg": "Merging / post-processing…", "level": "info"})
 
         def postproc_hook(d):
             if d.get("status") == "started":
@@ -330,14 +385,11 @@ class Handler(BaseHTTPRequestHandler):
                         result["filename"] = fn
 
         try:
-            output_dir = body.get("output", "").strip()
-            if not output_dir:
-                output_dir = DOWNLOAD_DIR
-
-            opts = build_ydl_opts(body, progress_hook=progress_hook, output_dir=output_dir)
+            # Always download to the temp directory (NOT the user's machine Downloads)
+            opts = build_ydl_opts(body, progress_hook=progress_hook, output_dir=TEMP_DIR)
             opts["postprocessor_hooks"] = [postproc_hook]
 
-            self._stream_event({"type": "log", "msg": f"Starting download…", "level": "info"})
+            self._stream_event({"type": "log", "msg": "Starting download…", "level": "info"})
             self._stream_event({"type": "log", "msg": f"Format: {body.get('format','mp4').upper()}", "level": "info"})
 
             with yt_dlp.YoutubeDL(opts) as ydl:
@@ -346,18 +398,21 @@ class Handler(BaseHTTPRequestHandler):
             if error_code == 0 or result["filename"]:
                 fn = result["filename"] or "file"
                 sz = result["filesize"] or "—"
+
+                # Register the file and get a download ID
+                file_id = register_file(str(fn))
+
                 self._stream_event({
-                    "type": "done",
+                    "type":     "done",
                     "filename": os.path.basename(str(fn)),
-                    "filepath": str(fn),
-                    "size": sz,
+                    "file_id":  file_id,       # ← the frontend uses this to fetch the file
+                    "size":     sz,
                 })
             else:
                 self._stream_event({"type": "error", "msg": "Download failed. Check URL or options."})
 
         except yt_dlp.utils.DownloadError as e:
             msg = str(e)
-            # Strip noisy prefix
             msg = re.sub(r"^ERROR:\s*", "", msg)
             self._stream_event({"type": "error", "msg": msg})
         except BrokenPipeError:
@@ -409,14 +464,16 @@ def main():
         print(f"\n  ✓ yt-dlp {yt_dlp.version.__version__}")
 
     print(f"  ✓ Listening on  http://{HOST}:{PORT}")
-    print(f"  ✓ Downloads →   {DOWNLOAD_DIR}")
+    print(f"  ✓ Temp dir  →   {TEMP_DIR}")
     print(f"\n  Endpoints:")
-    print(f"    GET  /ping      — health check")
-    print(f"    GET  /version   — yt-dlp version")
-    print(f"    POST /info      — fetch video metadata")
-    print(f"    POST /download  — download (NDJSON stream)")
-    print("\n  Open ytdl_v1_frontend.html or ytdl_v2_frontend.html in your browser.")
-    print("  Press Ctrl+C to stop.\n")
+    print(f"    GET  /ping         — health check")
+    print(f"    GET  /version      — yt-dlp version")
+    print(f"    POST /info         — fetch video metadata")
+    print(f"    POST /download     — download (NDJSON stream + file_id)")
+    print(f"    GET  /file/<id>    — serve file to user's browser")
+    print("\n  Files are downloaded to a temp dir, streamed to the")
+    print("  user's browser, then auto-deleted from the server.")
+    print("\n  Press Ctrl+C to stop.\n")
     print("═"*52 + "\n")
 
     server = HTTPServer((HOST, PORT), Handler)
