@@ -177,10 +177,19 @@ def build_ydl_opts(params: dict, progress_hook=None, output_dir: str = "") -> di
 # ─────────────────────────────────────────────
 # HTTP Request Handler
 # ─────────────────────────────────────────────
-class Handler(BaseHTTPRequestHandler):
+import mimetypes
+from urllib.parse import parse_qs, urlparse
 
-    def log_message(self, fmt, *args):
-        print(f"  [{self.command}] {self.path}  {args[1] if len(args) > 1 else ''}")
+DOWNLOAD_DIR = os.path.join(os.getcwd(), "downloads")
+if not os.path.exists(DOWNLOAD_DIR):
+    os.makedirs(DOWNLOAD_DIR)
+
+class Handler(BaseHTTPRequestHandler):
+    
+    def log_request_info(self):
+        forwarded_ip = self.headers.get('X-Forwarded-For')
+        client_ip = forwarded_ip if forwarded_ip else self.client_address[0]
+        print(f"\n[+] BAĞLANTI: {client_ip} | Yol: {self.path}")
 
     def send_cors(self):
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -192,45 +201,41 @@ class Handler(BaseHTTPRequestHandler):
         self.send_cors()
         self.end_headers()
 
-import mimetypes
+    def do_GET(self):
+        self.log_request_info()
+        parsed = urlparse(self.path)
+        path = parsed.path.rstrip('/')
+        query = parse_qs(parsed.query)
 
-# ... (mevcut importlar)
-
-def do_GET(self):
-    # URL'yi ve parametreleri ayır
-    parsed_path = urlparse(self.path)
-    path = parsed_path.path.rstrip('/')
-    query = parse_qs(parsed_path.query)
-
-    if path == "/ping":
-        self._json({"status": "ok"})
-
-    # YENİ: Dosyayı indirme isteği geldiğinde
-    elif path == "/get_file":
-        filename = query.get('name', [None])[0]
-        if not filename:
-            self._json({"error": "Dosya adı eksik"}, 400)
-            return
-
-        # Dosya yolunu oluştur (indirilenler klasöründe ara)
-        file_path = os.path.join(DOWNLOAD_DIR, filename)
-
-        if os.path.exists(file_path):
+        if path == "/ping":
             self.send_response(200)
-            self.send_cors() # CORS başlıkları çok önemli!
-            
-            # Dosya türünü belirle (mp4, mp3 vb.)
-            mime_type, _ = mimetypes.guess_type(file_path)
-            self.send_header("Content-Type", mime_type or "application/octet-stream")
-            self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
-            self.send_header("Content-Length", str(os.path.getsize(file_path)))
+            self.send_cors()
+            self.send_header("Content-Type", "application/json")
             self.end_headers()
+            self.wfile.write(json.dumps({"status": "ok"}).encode())
 
-            # Dosyayı kullanıcıya gönder
-            with open(file_path, 'rb') as f:
-                shutil.copyfileobj(f, self.wfile)
-        else:
-            self._json({"error": "Dosya sunucuda bulunamadı"}, 404)
+        elif path.startswith("/file/"):
+            file_id = path[len("/file/"):]
+            self._serve_file(file_id)
+
+        # DOSYAYI WEB ÜZERİNDEN GÖNDEREN KISIM
+        elif path == "/get_file":
+            filename = query.get('name', [None])[0]
+            if filename:
+                file_path = os.path.join(DOWNLOAD_DIR, filename)
+                if os.path.exists(file_path):
+                    self.send_response(200)
+                    self.send_cors()
+                    mime_type, _ = mimetypes.guess_type(file_path)
+                    self.send_header("Content-Type", mime_type or "application/octet-stream")
+                    self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+                    self.send_header("Content-Length", str(os.path.getsize(file_path)))
+                    self.end_headers()
+                    with open(file_path, 'rb') as f:
+                        shutil.copyfileobj(f, self.wfile)
+                    return
+            self.send_response(404)
+            self.end_headers()
 
     def do_POST(self):
         length  = int(self.headers.get("Content-Length", 0))
