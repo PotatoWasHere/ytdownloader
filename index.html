@@ -1096,22 +1096,10 @@ setInterval(() => {
   if (el) el.textContent = now.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
 }, 1000);
 
-// Load config.json → get backend URL → then ping
+// Backend URL — ngrok adresini buraya yaz
 async function loadConfig() {
-  const dot = document.getElementById('status-dot');
-  const txt = document.getElementById('status-text');
-  try {
-    const r = await fetch('/config.json?_=' + Date.now()); // cache bust
-    if (!r.ok) throw new Error('config.json not found');
-    const cfg = await r.json();
-    if (!cfg.backend_url) throw new Error('backend_url missing in config.json');
-    API = cfg.backend_url.replace(/\/$/, '');
-    await checkBackend();
-  } catch (e) {
-    dot.className = 'pill-dot offline';
-    txt.textContent = 'Config hatası';
-    console.error('Config load error:', e);
-  }
+  API = 'https://jeanna-noncontrastive-waterlessly.ngrok-free.app';
+  await checkBackend();
 }
 
 // Backend check
@@ -1120,10 +1108,7 @@ async function checkBackend() {
   const txt = document.getElementById('status-text');
   if (!API) { dot.className = 'pill-dot offline'; txt.textContent = 'Backend offline'; return; }
   try {
-    const r = await fetch(API + '/ping', {
-      signal: AbortSignal.timeout(4000),
-      headers: { 'ngrok-skip-browser-warning': '1' }
-    });
+    const r = await fetch(API + '/ping', {signal: AbortSignal.timeout(4000), headers: {'ngrok-skip-browser-warning': '1'}});
     if (r.ok) {
       dot.className = 'pill-dot';
       txt.textContent = 'Backend online';
@@ -1288,9 +1273,18 @@ function handleEvent(ev) {
   } else if (ev.type === 'done') {
     updateProgress(100);
     document.getElementById('s-eta').textContent = '✓ Done';
-    toast('Download complete!', 'success');
-    addLog('Saved: ' + ev.filename, 'l-ok');
+    toast('Download complete! Dosya indiriliyor…', 'success');
+    addLog('Hazır: ' + ev.filename, 'l-ok');
     addHistory(ev);
+    if (ev.file_id) {
+      const a = document.createElement('a');
+      a.href = API + '/file/' + ev.file_id;
+      a.download = ev.filename || 'download';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      addLog('Tarayıcı indirmesi başlatıldı ✓', 'l-ok');
+    }
   } else if (ev.type === 'error') {
     addLog(ev.msg, 'l-err');
     toast(ev.msg, 'error');
@@ -1406,39 +1400,6 @@ function toast(msg, type='') {
   t.style.display = 'block';
   clearTimeout(t._timer);
   t._timer = setTimeout(() => t.style.display = 'none', 3200);
-} // Bu süslü parantez eksikti, o yüzden kod çalışmıyordu.
-
-function triggerBrowserDownload(fileName) {
-  // Config'den gelen URL'nin başında https:// yoksa ekle
-  let backendUrl = config.backend_url;
-  if (!backendUrl.startsWith('http')) {
-      backendUrl = 'https://' + backendUrl;
-  }
-  
-  const downloadUrl = `${backendUrl}/get_file?name=${encodeURIComponent(fileName)}`;
-  
-  const a = document.createElement('a');
-  a.href = downloadUrl;
-  a.download = fileName;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  
-  toast("Dosya tarayıcınıza aktarılıyor...", "success");
-
-if (data.status === 'complete') {
-  toast('Finished!', 'success');
-  btn.disabled = false;
-  btn.textContent = 'Download';
-  progressContainer.style.display = 'none';
-  
-  // İŞTE KRİTİK SATIR: Backend bitti dediğinde tarayıcı indirmesini başlat
-  if (data.filename) {
-      triggerBrowserDownload(data.filename);
-  }
-}
-}
-}
 }
 </script>
 </body>
