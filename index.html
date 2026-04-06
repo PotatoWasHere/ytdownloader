@@ -1096,10 +1096,22 @@ setInterval(() => {
   if (el) el.textContent = now.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
 }, 1000);
 
-// Backend URL — ngrok adresini buraya yaz
+// Load config.json → get backend URL → then ping
 async function loadConfig() {
-  API = 'https://jeanna-noncontrastive-waterlessly.ngrok-free.app';
-  await checkBackend();
+  const dot = document.getElementById('status-dot');
+  const txt = document.getElementById('status-text');
+  try {
+    const r = await fetch('/config.json?_=' + Date.now()); // cache bust
+    if (!r.ok) throw new Error('config.json not found');
+    const cfg = await r.json();
+    if (!cfg.backend_url) throw new Error('backend_url missing in config.json');
+    API = cfg.backend_url.replace(/\/$/, '');
+    await checkBackend();
+  } catch (e) {
+    dot.className = 'pill-dot offline';
+    txt.textContent = 'Config hatası';
+    console.error('Config load error:', e);
+  }
 }
 
 // Backend check
@@ -1273,18 +1285,9 @@ function handleEvent(ev) {
   } else if (ev.type === 'done') {
     updateProgress(100);
     document.getElementById('s-eta').textContent = '✓ Done';
-    toast('Download complete! Dosya indiriliyor…', 'success');
-    addLog('Hazır: ' + ev.filename, 'l-ok');
+    toast('Download complete!', 'success');
+    addLog('Saved: ' + ev.filename, 'l-ok');
     addHistory(ev);
-    if (ev.file_id) {
-      const a = document.createElement('a');
-      a.href = API + '/file/' + ev.file_id;
-      a.download = ev.filename || 'download';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      addLog('Tarayıcı indirmesi başlatıldı ✓', 'l-ok');
-    }
   } else if (ev.type === 'error') {
     addLog(ev.msg, 'l-err');
     toast(ev.msg, 'error');
